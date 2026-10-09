@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE = import.meta.env.PROD ? "/api" : (import.meta.env.VITE_API_URL || "http://localhost:5000/api");
 
 // Generate a random session ID once when the app loads
 const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
