@@ -9,6 +9,11 @@
       }
     }
   ],
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "backend/**"
+    }
+  },
   "routes": [
     {
       "src": "/(assets/.*)",
