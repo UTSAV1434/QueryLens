@@ -1,8 +1,8 @@
-# InsightAI — Frontend
+# QueryLens — Frontend
 
-![InsightAI Screenshot](./src/assets/hero.png)
+![QueryLens Screenshot](./src/assets/hero.png)
 
-This is the React + Vite frontend for the **InsightAI Conversational BI Dashboard**. It provides the chat interface, file upload mechanism, and dynamic charts using Recharts.
+This is the React + Vite frontend for the **QueryLens Conversational BI Dashboard**. It provides the chat interface, file upload mechanism, and dynamic charts using Recharts.
 
 ## Setup Instructions
 

@@ -12,59 +12,30 @@ from dotenv import load_dotenv
 
 from llm_engine import query_llm
 from query_executor import execute_pandas_query, dataframe_to_chart_data
+from data_manager import DatasetManager
+from schema_analyzer import SchemaAnalyzer
 
 load_dotenv()
+
 
 app = Flask(__name__)
 CORS(app)
 
-# ---------------------------------------------------------------------------
-# Data store — holds whatever CSV the user has loaded
-# ---------------------------------------------------------------------------
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Global state for the currently loaded dataset
-current_data = {
-    "df": None,
-    "filename": None,
-    "schema_info": "",
-    "sample_rows": "",
-}
+# Global singleton DatasetManager to handle all sessions
+dataset_manager = DatasetManager()
 
+def get_session_id():
+    """Extract session ID from headers or fallback to a default."""
+    return request.headers.get("X-Session-ID", "default_session")
 
-def load_dataset(filepath: str, filename: str):
-    """Load a CSV file into the global data store."""
-    df = pd.read_csv(filepath)
-    current_data["df"] = df
-    current_data["filename"] = filename
-
-    # Build schema info string
-    schema_lines = []
-    for col in df.columns:
-        dtype = str(df[col].dtype)
-        non_null = df[col].count()
-        unique = df[col].nunique()
-        schema_lines.append(f"  - {col} ({dtype}): {non_null} non-null, {unique} unique values")
-
-        # Add sample values for categorical/string columns
-        if df[col].dtype == "object" and unique <= 20:
-            sample_vals = df[col].unique()[:10].tolist()
-            schema_lines.append(f"    Sample values: {sample_vals}")
-
-    current_data["schema_info"] = (
-        f"Dataset: {filename}\n"
-        f"Shape: {df.shape[0]} rows × {df.shape[1]} columns\n"
-        f"Columns:\n" + "\n".join(schema_lines)
-    )
-    current_data["sample_rows"] = df.head(5).to_string(index=False)
-
-
-# Load default sample dataset on startup
+# Load default sample dataset on startup for the default session
 default_csv = os.path.join(DATA_DIR, "sample_sales_data.csv")
 if os.path.exists(default_csv):
-    load_dataset(default_csv, "sample_sales_data.csv")
+    dataset_manager.load_dataset("default_session", default_csv, "sample_sales_data.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -73,73 +44,62 @@ if os.path.exists(default_csv):
 
 @app.route("/api/health", methods=["GET"])
 def health():
+    session_id = get_session_id()
+    data = dataset_manager.get_session_data(session_id)
     return jsonify({
         "status": "ok",
-        "dataset_loaded": current_data["df"] is not None,
-        "dataset_name": current_data["filename"],
+        "dataset_loaded": data is not None,
+        "dataset_name": data["filename"] if data else None,
+        "session_id": session_id
     })
 
 
 @app.route("/api/schema", methods=["GET"])
 def schema():
-    if current_data["df"] is None:
-        return jsonify({"error": "No dataset loaded. Please upload a CSV file."}), 400
+    session_id = get_session_id()
+    data = dataset_manager.get_session_data(session_id)
+    
+    if not data or data["df"] is None:
+        return jsonify({"error": "No dataset loaded for this session. Please upload a CSV file."}), 400
 
-    df = current_data["df"]
-    columns = []
-    for col in df.columns:
-        col_info = {
-            "name": col,
-            "dtype": str(df[col].dtype),
-            "non_null_count": int(df[col].count()),
-            "unique_count": int(df[col].nunique()),
-        }
-        if df[col].dtype == "object":
-            col_info["sample_values"] = df[col].unique()[:10].tolist()
-        elif df[col].dtype in ["int64", "float64"]:
-            col_info["min"] = float(df[col].min())
-            col_info["max"] = float(df[col].max())
-            col_info["mean"] = round(float(df[col].mean()), 2)
-        columns.append(col_info)
-
-    return jsonify({
-        "filename": current_data["filename"],
-        "rows": int(df.shape[0]),
-        "columns_count": int(df.shape[1]),
-        "columns": columns,
-    })
+    df = data["df"]
+    schema_dict = SchemaAnalyzer.extract_schema_dict(df, data["filename"])
+    return jsonify(schema_dict)
 
 
 @app.route("/api/query", methods=["POST"])
 def query():
-    if current_data["df"] is None:
+    session_id = get_session_id()
+    data = dataset_manager.get_session_data(session_id)
+    
+    if not data or data["df"] is None:
         return jsonify({"error": "No dataset loaded. Please upload a CSV file first."}), 400
 
-    data = request.get_json()
-    if not data or "query" not in data:
+    req_data = request.get_json()
+    if not req_data or "query" not in req_data:
         return jsonify({"error": "Missing 'query' field in request body."}), 400
 
-    user_query = data["query"].strip()
+    user_query = req_data["query"].strip()
     if not user_query:
         return jsonify({"error": "Query cannot be empty."}), 400
 
     # Step 1: Ask Gemini to generate pandas code
     llm_response = query_llm(
         user_query,
-        current_data["schema_info"],
-        current_data["sample_rows"]
+        data["schema_info"],
+        data["sample_rows"]
     )
 
     if "error" in llm_response:
         return jsonify({
             "error": llm_response["error"],
             "type": "llm_error"
-        }), 200  # Still 200 — it's a valid response, just an error message
+        }), 200
 
     # Step 2: Execute the pandas code
     try:
         result_df = execute_pandas_query(
-            current_data["df"],
+            data["df"],
             llm_response.get("pandas_code", "")
         )
     except RuntimeError as e:
@@ -174,6 +134,7 @@ def query():
 
 @app.route("/api/upload", methods=["POST"])
 def upload():
+    session_id = get_session_id()
     if "file" not in request.files:
         return jsonify({"error": "No file provided. Please upload a CSV file."}), 400
 
@@ -188,13 +149,13 @@ def upload():
     filepath = os.path.join(UPLOAD_DIR, file.filename)
     file.save(filepath)
 
-    # Load into memory
+    # Load into memory using DatasetManager
     try:
-        load_dataset(filepath, file.filename)
+        dataset_manager.load_dataset(session_id, filepath, file.filename)
     except Exception as e:
         return jsonify({"error": f"Failed to load CSV: {str(e)}"}), 400
 
-    df = current_data["df"]
+    df = dataset_manager.get_dataframe(session_id)
     return jsonify({
         "message": f"Successfully loaded '{file.filename}'",
         "filename": file.filename,
@@ -207,6 +168,7 @@ def upload():
 @app.route("/api/datasets", methods=["GET"])
 def list_datasets():
     """List available datasets in the data directory."""
+    session_id = get_session_id()
     datasets = []
 
     # Check data dir
@@ -221,20 +183,22 @@ def list_datasets():
             if f.endswith(".csv"):
                 datasets.append({"name": f, "source": "uploaded"})
 
+    data = dataset_manager.get_session_data(session_id)
     return jsonify({
         "datasets": datasets,
-        "current": current_data["filename"],
+        "current": data["filename"] if data else None,
     })
 
 
 @app.route("/api/datasets/load", methods=["POST"])
 def load_existing_dataset():
     """Load an existing dataset by name."""
-    data = request.get_json()
-    if not data or "filename" not in data:
+    session_id = get_session_id()
+    req_data = request.get_json()
+    if not req_data or "filename" not in req_data:
         return jsonify({"error": "Missing 'filename' field."}), 400
 
-    filename = data["filename"]
+    filename = req_data["filename"]
 
     # Search in data dir first, then uploads
     filepath = os.path.join(DATA_DIR, filename)
@@ -244,11 +208,11 @@ def load_existing_dataset():
             return jsonify({"error": f"File '{filename}' not found."}), 404
 
     try:
-        load_dataset(filepath, filename)
+        dataset_manager.load_dataset(session_id, filepath, filename)
     except Exception as e:
         return jsonify({"error": f"Failed to load: {str(e)}"}), 400
 
-    df = current_data["df"]
+    df = dataset_manager.get_dataframe(session_id)
     return jsonify({
         "message": f"Loaded '{filename}'",
         "rows": int(df.shape[0]),

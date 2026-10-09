@@ -74,13 +74,25 @@ export default function App() {
         ...prev,
         {
           type: "assistant",
-          text: `✅ Dataset "${result.filename}" loaded successfully!\n📊 ${result.rows} rows × ${result.columns} columns\n📋 Columns: ${result.column_names.join(", ")}\n\nYou can now ask questions about this data!`,
+          text: `Dataset "${result.filename}" loaded successfully!\n\nRows: ${result.rows} | Columns: ${result.columns}\nAvailable: ${result.column_names.join(", ")}`,
         },
       ]);
-      // Clear previous charts since dataset changed
       setCharts([]);
     }
     return result;
+  };
+
+  const handleUndo = () => {
+    // Remove last user message and assistant message
+    setMessages(prev => {
+      const newMsgs = [...prev];
+      if (newMsgs.length >= 2 && newMsgs[newMsgs.length - 1].type === "assistant" && newMsgs[newMsgs.length - 2].type === "user") {
+        newMsgs.splice(-2, 2);
+      }
+      return newMsgs;
+    });
+    // Remove last chart
+    setCharts(prev => prev.slice(1));
   };
 
   return (
@@ -94,6 +106,7 @@ export default function App() {
           messages={messages}
           onSendQuery={handleSendQuery}
           isLoading={isLoading}
+          onUndo={handleUndo}
         />
         <DashboardPanel charts={charts} />
       </div>

@@ -64,7 +64,7 @@ def query_llm(user_query: str, schema_info: str, sample_rows: str) -> dict:
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://localhost:5173",
-        "X-Title": "InsightAI BI Dashboard",
+        "X-Title": "QueryLens BI Dashboard",
     }
 
     payload = {

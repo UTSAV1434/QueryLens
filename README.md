@@ -1,4 +1,4 @@
-# 📊 InsightAI — Conversational BI Dashboard
+# 📊 QueryLens — Conversational BI Dashboard
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![React](https://img.shields.io/badge/React-18.x-blue)
@@ -6,11 +6,11 @@
 ![Flask](https://img.shields.io/badge/Flask-2.x-lightgrey)
 ![Gemini](https://img.shields.io/badge/Google_Gemini-2.0_Flash-orange)
 
-![InsightAI Screenshot](./frontend/src/assets/hero.png)
+![QueryLens Screenshot](./frontend/src/assets/hero.png)
 
 > **Empower your data with natural language.** Upload any CSV dataset and ask questions in plain English. Get interactive charts and insights instantly, powered by Google Gemini AI.
 
-InsightAI is a powerful conversational Business Intelligence dashboard designed to make data analysis accessible to everyone. Forget complex SQL queries or intricate charting libraries—just upload your data, ask a question, and let AI do the rest.
+QueryLens is a powerful conversational Business Intelligence dashboard designed to make data analysis accessible to everyone. Forget complex SQL queries or intricate charting libraries—just upload your data, ask a question, and let AI do the rest.
 
 ---
 
