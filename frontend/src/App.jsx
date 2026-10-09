@@ -24,7 +24,7 @@ export default function App() {
         setMessages([
           {
             type: "error",
-            text: "⚠️ Cannot connect to the backend. Make sure the Flask server is running on http://localhost:5000",
+            text: `⚠️ Cannot connect to the backend. Make sure the Flask server is running and accessible.`,
           },
         ]);
       });
